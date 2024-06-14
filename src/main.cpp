@@ -21,25 +21,28 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 SoftwareSerial esp8266(ESP8266_RX, ESP8266_TX);
 
-const char *ssid = "YOUR_SSID";
-const char *password = "YOUR_PASSWORD";
-const char *awsEndpoint = "YOUR_AWS_IOT_ENDPOINT";
-const char *topic = "YOUR_SNS_TOPIC_ARN";
-
 byte masterUID[] = {0x03, 0x89, 0xaf, 0x0d};
-
-bool isOnline = false;
-
-void connectWiFi();
 
 void displayStatus();
 
-String sendATCommand(const char *cmd, int timeout, bool debug);
+void displayMessage(String message);
+
+void dump_byte_array(byte *buffer, byte bufferSize);
+
+bool isMasterCard(byte *buffer, byte bufferSize);
+
+String checkUserInCloud(String uid);
+
+void playMelody(int melody[], int durations[], int size);
+
+void sendHttpRequest(String payload);
+
+void logSerialESP();
 
 void setup() {
     Serial.begin(9600);
-    esp8266.begin(115200);
-    SPI.begin();
+    esp8266.begin(9600);
+    SPIClass::begin();
     rfid.PCD_Init();
 
     pinMode(RELAY_PIN, OUTPUT);
@@ -61,48 +64,14 @@ void setup() {
     delay(2000);
     display.clearDisplay();
 
-    connectWiFi();
     displayStatus();
 }
 
-void connectWiFi() {
-    sendATCommand("AT+RST", 1000, true);
-    sendATCommand("AT+CWMODE=1", 1000, true);
-    String cmd = "AT+CWJAP=\"" + String(ssid) + "\",\"" + String(password) + "\"";
-    String response = sendATCommand(cmd.c_str(), 5000, true);
-
-    if (response.indexOf("WIFI CONNECTED") != -1) {
-        isOnline = true;
-    } else {
-        isOnline = false;
-    }
-}
-
-String sendATCommand(const char *cmd, int timeout, bool debug) {
-    String response = "";
-    esp8266.print(cmd);
-    long int time = millis();
-    while ((time + timeout) > millis()) {
-        while (esp8266.available()) {
-            char c = esp8266.read();
-            response += c;
-        }
-    }
-    if (debug) {
-        Serial.print(response);
-    }
-    return response;
-}
-
 void displayStatus() {
+    display.clearDisplay();
     display.setTextSize(1);
-    display.setTextColor(WHITE);
     display.setCursor(0, 0);
-    if (isOnline) {
-        display.println("Modo Online");
-    } else {
-        display.println("Modo Offline");
-    }
+    display.println("Modo Online"); // Assuming the ESP-01 is always online if it's running its own Wi-Fi logic
     display.display();
 }
 
@@ -145,23 +114,6 @@ String checkUserInCloud(String uid) {
     return "";
 }
 
-void sendSNSTopic(String message) {
-    String atCommand = "AT+CIPSTART=\"TCP\",\"" + String(awsEndpoint) + "\",443";
-    sendATCommand(atCommand.c_str(), 10000, true);
-
-    String httpRequest = "POST /sns HTTP/1.1\r\n";
-    httpRequest += "Host: " + String(awsEndpoint) + "\r\n";
-    httpRequest += "Content-Type: application/json\r\n";
-    httpRequest += "Content-Length: " + String(message.length()) + "\r\n\r\n";
-    httpRequest += message;
-
-    String sendCommand = "AT+CIPSEND=" + String(httpRequest.length());
-    sendATCommand(sendCommand.c_str(), 1000, true);
-    sendATCommand(httpRequest.c_str(), 1000, true);
-
-    sendATCommand("AT+CIPCLOSE", 1000, true);
-}
-
 void playMelody(int melody[], int durations[], int size) {
     for (int thisNote = 0; thisNote < size; thisNote++) {
         int noteDuration = 1000 / durations[thisNote];
@@ -171,6 +123,19 @@ void playMelody(int melody[], int durations[], int size) {
         int pauseBetweenNotes = noteDuration * 1.30;
         delay(pauseBetweenNotes);
         noTone(BUZZER_PIN);
+    }
+}
+
+void sendHttpRequest(String payload) {
+    Serial.print("Sending to ESP: ");
+    Serial.println(payload);
+    esp8266.println(payload);
+}
+
+void logSerialESP() {
+    while (esp8266.available()) {
+        char c = esp8266.read();
+        Serial.write(c);
     }
 }
 
@@ -198,19 +163,14 @@ void loop() {
             digitalWrite(RELAY_PIN, LOW);
 
             // Envia mensagem SNS
-            if (isOnline) {
-                String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
-                sendSNSTopic(message);
-            }
+            String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
+            sendHttpRequest(message);
 
             // Atualiza o display
             displayMessage("Acesso Permitido:\nMaster");
 
         } else {
-            String userName = "";
-            if (isOnline) {
-                userName = checkUserInCloud(uidString);
-            }
+            String userName = checkUserInCloud(uidString);
             if (userName != "") {
                 Serial.println("User detected: " + userName);
 
@@ -226,7 +186,7 @@ void loop() {
 
                 // Envia mensagem SNS
                 String message = R"({"default": "User Accessed: )" + userName + " at " + String(millis()) + "\"}";
-                sendSNSTopic(message);
+                sendHttpRequest(message);
 
                 // Atualiza o display
                 displayMessage("Acesso Permitido:\n" + userName);
@@ -245,5 +205,7 @@ void loop() {
         display.clearDisplay();
         displayStatus(); // Atualiza o display com o status online/offline após cada operação
     }
+
+    logSerialESP(); // Log the ESP-01 serial output to the Arduino serial monitor
     delay(500);
 }
