@@ -29,8 +29,8 @@ Este projeto utiliza um Arduino Mega para ler cartões RFID utilizando o módulo
 ### ESP8266
 - **VCC**: 3.3V
 - **GND**: GND
-- **RX**: Pino 18 (TX do Arduino Mega)
-- **TX**: Pino 19 (RX do Arduino Mega)
+- **RX**: Pino 11 (TX)
+- **TX**: Pino 10 (RX)
 
 ## Código
 
