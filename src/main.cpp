@@ -24,25 +24,18 @@ SoftwareSerial esp8266(ESP8266_RX, ESP8266_TX);
 byte masterUID[] = {0x03, 0x89, 0xaf, 0x0d};
 
 void displayStatus();
-
 void displayMessage(String message);
-
 void dump_byte_array(byte *buffer, byte bufferSize);
-
 bool isMasterCard(byte *buffer, byte bufferSize);
-
 String checkUserInCloud(String uid);
-
 void playMelody(int melody[], int durations[], int size);
-
 void sendHttpRequest(String payload);
-
 void logSerialESP();
 
 void setup() {
     Serial.begin(9600);
     esp8266.begin(9600);
-    SPIClass::begin();
+    SPI.begin();
     rfid.PCD_Init();
 
     pinMode(RELAY_PIN, OUTPUT);
