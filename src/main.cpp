@@ -110,6 +110,17 @@ bool isMasterCard(byte *buffer, byte bufferSize) {
     return true;
 }
 
+String checkUserInCloud(String uid) {
+    // Simula a verificação de um usuário cadastrado na nuvem
+    // Em um cenário real, você faria uma solicitação HTTP para o endpoint da AWS para verificar o usuário
+    if (uid == "12345678") {
+        return "John Doe";
+    } else if (uid == "87654321") {
+        return "Jane Doe";
+    }
+    return "";
+}
+
 void sendSNSTopic(String message) {
     String atCommand = "AT+CIPSTART=\"TCP\",\"" + String(awsEndpoint) + "\",443";
     sendATCommand(atCommand.c_str(), 10000, true);
@@ -143,8 +154,20 @@ void loop() {
     if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
         dump_byte_array(rfid.uid.uidByte, rfid.uid.size);
 
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.println("Realizando Leitura...");
+        display.display();
+
+        String uidString;
+        for (byte i = 0; i < rfid.uid.size; i++) {
+            uidString += String(rfid.uid.uidByte[i] < 0x10 ? "0" : "");
+            uidString += String(rfid.uid.uidByte[i], HEX);
+        }
+
         if (isMasterCard(rfid.uid.uidByte, rfid.uid.size)) {
             Serial.println("Master card detected!");
+
             // Toca a melodia de sucesso
             int successMelody[] = {262, 294, 330, 349, 392}; // C4, D4, E4, F4, G4
             int successDurations[] = {8, 8, 8, 8, 8};
@@ -158,11 +181,52 @@ void loop() {
             // Envia mensagem SNS
             String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
             sendSNSTopic(message);
+
+            // Atualiza o display
+            display.clearDisplay();
+            display.setCursor(0, 0);
+            display.println("Acesso Permitido:");
+            display.println("Master");
+            display.display();
+
         } else {
-            // Toca a melodia de falha
-            int failMelody[] = {659, 523, 587, 523, 311}; // E5, C5, D5, C5, DS4
-            int failDurations[] = {8, 8, 8, 8, 8};
-            playMelody(failMelody, failDurations, sizeof(failMelody) / sizeof(failMelody[0]));
+            String userName = checkUserInCloud(uidString);
+            if (userName != "") {
+                Serial.println("User detected: " + userName);
+
+                // Toca a melodia de sucesso
+                int successMelody[] = {262, 294, 330, 349, 392}; // C4, D4, E4, F4, G4
+                int successDurations[] = {8, 8, 8, 8, 8};
+                playMelody(successMelody, successDurations, sizeof(successMelody) / sizeof(successMelody[0]));
+
+                // Ativa o relé
+                digitalWrite(RELAY_PIN, HIGH);
+                delay(1000); // Mantém o relé ativado por 1 segundo
+                digitalWrite(RELAY_PIN, LOW);
+
+                // Envia mensagem SNS
+                String message = R"({"default": "User Accessed: )" + userName + " at " + String(millis()) + "\"}";
+                sendSNSTopic(message);
+
+                // Atualiza o display
+                display.clearDisplay();
+                display.setCursor(0, 0);
+                display.println("Acesso Permitido:");
+                display.println(userName);
+                display.display();
+
+            } else {
+                // Toca a melodia de falha
+                int failMelody[] = {659, 523, 587, 523, 311}; // E5, C5, D5, C5, DS4
+                int failDurations[] = {8, 8, 8, 8, 8};
+                playMelody(failMelody, failDurations, sizeof(failMelody) / sizeof(failMelody[0]));
+
+                // Atualiza o display
+                display.clearDisplay();
+                display.setCursor(0, 0);
+                display.println("Acesso Negado");
+                display.display();
+            }
         }
     }
     delay(500);
