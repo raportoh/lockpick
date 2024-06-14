@@ -42,7 +42,7 @@ void sendHttpRequest(String payload);
 void logSerialESP();
 
 void setup() {
-    Serial.begin(9600);  // Ajustado para 9600
+    Serial.begin(9600);
     esp8266.begin(9600);
     SPIClass::begin();
     rfid.PCD_Init();
