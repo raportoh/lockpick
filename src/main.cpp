@@ -119,7 +119,7 @@ bool isMasterCard(byte *buffer, byte bufferSize) {
 }
 
 String checkUserInCloud(const String &uid) {
-    // Simula a verificação de um usuário cadastrado na nuvem
+    // Simula a verificação de um usuário cadastrado
     // Em um cenário real, seira feito uma solicitação HTTP para o endpoint da AWS para verificar o usuário
     if (uid == "12345678") {
         return "Admin";
