@@ -28,7 +28,11 @@ const char *topic = "YOUR_SNS_TOPIC_ARN";
 
 byte masterUID[] = {0x03, 0x89, 0xaf, 0x0d};
 
+bool isOnline = false;
+
 void connectWiFi();
+
+void displayStatus();
 
 String sendATCommand(const char *cmd, int timeout, bool debug);
 
@@ -58,13 +62,20 @@ void setup() {
     display.clearDisplay();
 
     connectWiFi();
+    displayStatus();
 }
 
 void connectWiFi() {
     sendATCommand("AT+RST", 1000, true);
     sendATCommand("AT+CWMODE=1", 1000, true);
     String cmd = "AT+CWJAP=\"" + String(ssid) + "\",\"" + String(password) + "\"";
-    sendATCommand(cmd.c_str(), 5000, true);
+    String response = sendATCommand(cmd.c_str(), 5000, true);
+
+    if (response.indexOf("WIFI CONNECTED") != -1) {
+        isOnline = true;
+    } else {
+        isOnline = false;
+    }
 }
 
 String sendATCommand(const char *cmd, int timeout, bool debug) {
@@ -83,6 +94,26 @@ String sendATCommand(const char *cmd, int timeout, bool debug) {
     return response;
 }
 
+void displayStatus() {
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    if (isOnline) {
+        display.println("Modo Online");
+    } else {
+        display.println("Modo Offline");
+    }
+    display.display();
+}
+
+void displayMessage(String message) {
+    display.clearDisplay();
+    displayStatus();
+    display.setCursor(0, 10); // Posiciona a mensagem abaixo do status
+    display.println(message);
+    display.display();
+}
+
 void dump_byte_array(byte *buffer, byte bufferSize) {
     String uidString;
     for (byte i = 0; i < bufferSize; i++) {
@@ -92,14 +123,7 @@ void dump_byte_array(byte *buffer, byte bufferSize) {
     Serial.print("UID:");
     Serial.println(uidString);
 
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("UID:");
-    display.println(uidString);
-    display.display();
-
-    delay(2000);
-    display.clearDisplay();
+    displayMessage("UID: " + uidString);
 }
 
 bool isMasterCard(byte *buffer, byte bufferSize) {
@@ -152,12 +176,7 @@ void playMelody(int melody[], int durations[], int size) {
 
 void loop() {
     if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-        dump_byte_array(rfid.uid.uidByte, rfid.uid.size);
-
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.println("Realizando Leitura...");
-        display.display();
+        displayMessage("Realizando Leitura...");
 
         String uidString;
         for (byte i = 0; i < rfid.uid.size; i++) {
@@ -179,18 +198,19 @@ void loop() {
             digitalWrite(RELAY_PIN, LOW);
 
             // Envia mensagem SNS
-            String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
-            sendSNSTopic(message);
+            if (isOnline) {
+                String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
+                sendSNSTopic(message);
+            }
 
             // Atualiza o display
-            display.clearDisplay();
-            display.setCursor(0, 0);
-            display.println("Acesso Permitido:");
-            display.println("Master");
-            display.display();
+            displayMessage("Acesso Permitido:\nMaster");
 
         } else {
-            String userName = checkUserInCloud(uidString);
+            String userName = "";
+            if (isOnline) {
+                userName = checkUserInCloud(uidString);
+            }
             if (userName != "") {
                 Serial.println("User detected: " + userName);
 
@@ -209,11 +229,7 @@ void loop() {
                 sendSNSTopic(message);
 
                 // Atualiza o display
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                display.println("Acesso Permitido:");
-                display.println(userName);
-                display.display();
+                displayMessage("Acesso Permitido:\n" + userName);
 
             } else {
                 // Toca a melodia de falha
@@ -222,12 +238,12 @@ void loop() {
                 playMelody(failMelody, failDurations, sizeof(failMelody) / sizeof(failMelody[0]));
 
                 // Atualiza o display
-                display.clearDisplay();
-                display.setCursor(0, 0);
-                display.println("Acesso Negado");
-                display.display();
+                displayMessage("Acesso Negado");
             }
         }
+        delay(2000); // Delay para manter a mensagem visível por 2 segundos
+        display.clearDisplay();
+        displayStatus(); // Atualiza o display com o status online/offline após cada operação
     }
     delay(500);
 }
