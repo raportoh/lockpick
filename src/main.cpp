@@ -22,15 +22,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 SoftwareSerial esp8266(ESP8266_RX, ESP8266_TX);
 
 byte masterUID[] = {0x03, 0x89, 0xaf, 0x0d};
+bool isOnline = false;
+
+void checkESPConnection();
 
 void displayStatus();
-void displayMessage(String message);
-void dump_byte_array(byte *buffer, byte bufferSize);
-bool isMasterCard(byte *buffer, byte bufferSize);
-String checkUserInCloud(String uid);
-void playMelody(int melody[], int durations[], int size);
-void sendHttpRequest(String payload);
-void logSerialESP();
 
 void setup() {
     Serial.begin(9600);
@@ -57,14 +53,27 @@ void setup() {
     delay(2000);
     display.clearDisplay();
 
+    checkESPConnection();
     displayStatus();
+}
+
+void checkESPConnection() {
+    esp8266.println("AT");
+    delay(1000);
+    if (esp8266.find("OK")) {
+        isOnline = true;
+        Serial.println("ESP-01 is online.");
+    } else {
+        isOnline = false;
+        Serial.println("ESP-01 is offline.");
+    }
 }
 
 void displayStatus() {
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(0, 0);
-    display.println("Modo Online"); // Assuming the ESP-01 is always online if it's running its own Wi-Fi logic
+    display.println(isOnline ? "Modo Online" : "Modo Offline");
     display.display();
 }
 
@@ -120,9 +129,13 @@ void playMelody(int melody[], int durations[], int size) {
 }
 
 void sendHttpRequest(String payload) {
-    Serial.print("Sending to ESP: ");
-    Serial.println(payload);
-    esp8266.println(payload);
+    if (isOnline) {
+        Serial.print("Sending to ESP: ");
+        Serial.println(payload);
+        esp8266.println(payload);
+    } else {
+        Serial.println("ESP-01 is offline. Cannot send request.");
+    }
 }
 
 void logSerialESP() {
