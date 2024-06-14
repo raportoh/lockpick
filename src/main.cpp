@@ -28,8 +28,22 @@ void checkESPConnection();
 
 void displayStatus();
 
+void displayMessage(String message);
+
+void dump_byte_array(byte *buffer, byte bufferSize);
+
+bool isMasterCard(byte *buffer, byte bufferSize);
+
+String checkUserInCloud(String uid);
+
+void playMelody(int melody[], int durations[], int size);
+
+void sendHttpRequest(String payload);
+
+void logSerialESP();
+
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(9600);  // Ajustado para 9600
     esp8266.begin(9600);
     SPI.begin();
     rfid.PCD_Init();
@@ -129,13 +143,13 @@ void playMelody(int melody[], int durations[], int size) {
 }
 
 void sendHttpRequest(String payload) {
-    if (isOnline) {
+//    if (isOnline) {
         Serial.print("Sending to ESP: ");
         Serial.println(payload);
         esp8266.println(payload);
-    } else {
-        Serial.println("ESP-01 is offline. Cannot send request.");
-    }
+//    } else {
+//        Serial.println("ESP-01 is offline. Cannot send request.");
+//    }
 }
 
 void logSerialESP() {
@@ -146,39 +160,18 @@ void logSerialESP() {
 }
 
 void loop() {
-    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-        displayMessage("Realizando Leitura...");
+    if (rfid.PICC_IsNewCardPresent()) {
+        if (rfid.PICC_ReadCardSerial()) {
+            displayMessage("Realizando Leitura...");
 
-        String uidString;
-        for (byte i = 0; i < rfid.uid.size; i++) {
-            uidString += String(rfid.uid.uidByte[i] < 0x10 ? "0" : "");
-            uidString += String(rfid.uid.uidByte[i], HEX);
-        }
+            String uidString;
+            for (byte i = 0; i < rfid.uid.size; i++) {
+                uidString += String(rfid.uid.uidByte[i] < 0x10 ? "0" : "");
+                uidString += String(rfid.uid.uidByte[i], HEX);
+            }
 
-        if (isMasterCard(rfid.uid.uidByte, rfid.uid.size)) {
-            Serial.println("Master card detected!");
-
-            // Toca a melodia de sucesso
-            int successMelody[] = {262, 294, 330, 349, 392}; // C4, D4, E4, F4, G4
-            int successDurations[] = {8, 8, 8, 8, 8};
-            playMelody(successMelody, successDurations, sizeof(successMelody) / sizeof(successMelody[0]));
-
-            // Ativa o relé
-            digitalWrite(RELAY_PIN, HIGH);
-            delay(1000); // Mantém o relé ativado por 1 segundo
-            digitalWrite(RELAY_PIN, LOW);
-
-            // Envia mensagem SNS
-            String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
-            sendHttpRequest(message);
-
-            // Atualiza o display
-            displayMessage("Acesso Permitido:\nMaster");
-
-        } else {
-            String userName = checkUserInCloud(uidString);
-            if (userName != "") {
-                Serial.println("User detected: " + userName);
+            if (isMasterCard(rfid.uid.uidByte, rfid.uid.size)) {
+                Serial.println("Master card detected!");
 
                 // Toca a melodia de sucesso
                 int successMelody[] = {262, 294, 330, 349, 392}; // C4, D4, E4, F4, G4
@@ -191,25 +184,48 @@ void loop() {
                 digitalWrite(RELAY_PIN, LOW);
 
                 // Envia mensagem SNS
-                String message = R"({"default": "User Accessed: )" + userName + " at " + String(millis()) + "\"}";
+                String message = "{\"default\": \"User Accessed: Master at " + String(millis()) + "\"}";
                 sendHttpRequest(message);
 
                 // Atualiza o display
-                displayMessage("Acesso Permitido:\n" + userName);
+                displayMessage("Acesso Permitido:\nMaster");
 
             } else {
-                // Toca a melodia de falha
-                int failMelody[] = {659, 523, 587, 523, 311}; // E5, C5, D5, C5, DS4
-                int failDurations[] = {8, 8, 8, 8, 8};
-                playMelody(failMelody, failDurations, sizeof(failMelody) / sizeof(failMelody[0]));
+                String userName = checkUserInCloud(uidString);
+                if (userName != "") {
+                    Serial.println("User detected: " + userName);
 
-                // Atualiza o display
-                displayMessage("Acesso Negado");
+                    // Toca a melodia de sucesso
+                    int successMelody[] = {262, 294, 330, 349, 392}; // C4, D4, E4, F4, G4
+                    int successDurations[] = {8, 8, 8, 8, 8};
+                    playMelody(successMelody, successDurations, sizeof(successMelody) / sizeof(successMelody[0]));
+
+                    // Ativa o relé
+                    digitalWrite(RELAY_PIN, HIGH);
+                    delay(1000); // Mantém o relé ativado por 1 segundo
+                    digitalWrite(RELAY_PIN, LOW);
+
+                    // Envia mensagem SNS
+                    String message = "{\"default\": \"User Accessed: " + userName + " at " + String(millis()) + "\"}";
+                    sendHttpRequest(message);
+
+                    // Atualiza o display
+                    displayMessage("Acesso Permitido:\n" + userName);
+
+                } else {
+                    // Toca a melodia de falha
+                    int failMelody[] = {659, 523, 587, 523, 311}; // E5, C5, D5, C5, DS4
+                    int failDurations[] = {8, 8, 8, 8, 8};
+                    playMelody(failMelody, failDurations, sizeof(failMelody) / sizeof(failMelody[0]));
+
+                    // Atualiza o display
+                    displayMessage("Acesso Negado");
+                }
             }
+            delay(2000); // Delay para manter a mensagem visível por 2 segundos
+            display.clearDisplay();
+            displayStatus(); // Atualiza o display com o status online/offline após cada operação
         }
-        delay(2000); // Delay para manter a mensagem visível por 2 segundos
-        display.clearDisplay();
-        displayStatus(); // Atualiza o display com o status online/offline após cada operação
     }
 
     logSerialESP(); // Log the ESP-01 serial output to the Arduino serial monitor
