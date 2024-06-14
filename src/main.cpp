@@ -1,7 +1,6 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <MFRC522.h>
-#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <SoftwareSerial.h>
 
@@ -28,13 +27,13 @@ void checkESPConnection();
 
 void displayStatus();
 
-void displayMessage(String message);
+void displayMessage(const String &message);
 
 void dump_byte_array(byte *buffer, byte bufferSize);
 
 bool isMasterCard(byte *buffer, byte bufferSize);
 
-String checkUserInCloud(String uid);
+String checkUserInCloud(const String &uid);
 
 void playMelody(int melody[], int durations[], int size);
 
@@ -45,7 +44,7 @@ void logSerialESP();
 void setup() {
     Serial.begin(9600);  // Ajustado para 9600
     esp8266.begin(9600);
-    SPI.begin();
+    SPIClass::begin();
     rfid.PCD_Init();
 
     pinMode(RELAY_PIN, OUTPUT);
@@ -74,7 +73,7 @@ void setup() {
 void checkESPConnection() {
     esp8266.println("AT");
     delay(1000);
-    if (esp8266.find("OK")) {
+    if (esp8266.find(*"OK")) {
         isOnline = true;
         Serial.println("ESP-01 is online.");
     } else {
@@ -91,7 +90,7 @@ void displayStatus() {
     display.display();
 }
 
-void displayMessage(String message) {
+void displayMessage(const String &message) {
     display.clearDisplay();
     displayStatus();
     display.setCursor(0, 10); // Posiciona a mensagem abaixo do status
@@ -119,13 +118,13 @@ bool isMasterCard(byte *buffer, byte bufferSize) {
     return true;
 }
 
-String checkUserInCloud(String uid) {
+String checkUserInCloud(const String &uid) {
     // Simula a verificação de um usuário cadastrado na nuvem
-    // Em um cenário real, você faria uma solicitação HTTP para o endpoint da AWS para verificar o usuário
+    // Em um cenário real, seira feito uma solicitação HTTP para o endpoint da AWS para verificar o usuário
     if (uid == "12345678") {
-        return "John Doe";
+        return "Admin";
     } else if (uid == "87654321") {
-        return "Jane Doe";
+        return "User";
     }
     return "";
 }
@@ -143,13 +142,13 @@ void playMelody(int melody[], int durations[], int size) {
 }
 
 void sendHttpRequest(String payload) {
-//    if (isOnline) {
+    if (isOnline) {
         Serial.print("Sending to ESP: ");
         Serial.println(payload);
         esp8266.println(payload);
-//    } else {
-//        Serial.println("ESP-01 is offline. Cannot send request.");
-//    }
+    } else {
+        Serial.println("ESP-01 is offline. Cannot send request.");
+    }
 }
 
 void logSerialESP() {
@@ -184,7 +183,7 @@ void loop() {
                 digitalWrite(RELAY_PIN, LOW);
 
                 // Envia mensagem SNS
-                String message = "{\"default\": \"User Accessed: Master at " + String(millis()) + "\"}";
+                String message = R"({"default": "User Accessed: Master at )" + String(millis()) + "\"}";
                 sendHttpRequest(message);
 
                 // Atualiza o display
@@ -206,7 +205,7 @@ void loop() {
                     digitalWrite(RELAY_PIN, LOW);
 
                     // Envia mensagem SNS
-                    String message = "{\"default\": \"User Accessed: " + userName + " at " + String(millis()) + "\"}";
+                    String message = R"({"default": "User Accessed: )" + userName + " at " + String(millis()) + "\"}";
                     sendHttpRequest(message);
 
                     // Atualiza o display
